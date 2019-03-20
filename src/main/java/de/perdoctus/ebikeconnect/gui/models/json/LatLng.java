@@ -52,6 +52,22 @@ public class LatLng {
         return lng;
     }
 
+    public int compareLatTo(LatLng latLng) {
+        if (lat > latLng.getLat())
+            return 1;
+        else if (lat < latLng.getLat())
+            return -1;
+        return 0;
+    }
+
+    public int compareLngTo(LatLng latLng) {
+        if (lng > latLng.getLng())
+            return 1;
+        else if (lng < latLng.getLng())
+            return -1;
+        return 0;
+    }
+
     @Override
     public String toString() {
         return "LatLng{lat=" + lat + ", lng=" + lng + '}';

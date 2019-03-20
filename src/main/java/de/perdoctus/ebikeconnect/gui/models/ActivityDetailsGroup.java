@@ -34,6 +34,7 @@ public class ActivityDetailsGroup {
 
     private List<ActivityDetails> activitySegments;
     private List<Coordinate> joinedTrackpoints;
+    private int joinedActivityCount;
 
     public ActivityDetailsGroup(List<ActivityDetails> activitySegments) {
         this.activitySegments = activitySegments;
@@ -48,8 +49,20 @@ public class ActivityDetailsGroup {
      */
     public List<Coordinate> getJoinedTrackpoints() {
         if (joinedTrackpoints == null) {
-            joinedTrackpoints = activitySegments.stream().flatMap(activityDetails -> activityDetails.getTrackPoints().stream()).collect(Collectors.toList());
+            joinedTrackpoints = activitySegments
+                    .stream()
+                    .flatMap(activityDetails -> activityDetails.getTrackPoints().stream().filter(Coordinate::isValid))
+                    .collect(Collectors.toList());
         }
         return joinedTrackpoints;
+    }
+
+    public int getJoinedActivityCount() {
+        if (joinedActivityCount == 0) {
+            for (ActivityDetails activityDetails : activitySegments) {
+                joinedActivityCount += activityDetails.getCadences().size();
+            }
+        }
+        return joinedActivityCount;
     }
 }

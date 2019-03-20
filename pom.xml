@@ -77,6 +77,13 @@
             <version>2.2.11</version>
         </dependency>
 
+        <!-- Google Maps Integration -->
+        <dependency>
+            <groupId>com.lynden</groupId>
+            <artifactId>GMapsFX</artifactId>
+            <version>2.12.0</version>
+        </dependency>
+
         <!-- Test Dependencies -->
         <dependency>
             <groupId>junit</groupId>

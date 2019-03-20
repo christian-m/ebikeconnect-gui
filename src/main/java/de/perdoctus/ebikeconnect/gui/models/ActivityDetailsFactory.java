@@ -88,7 +88,9 @@ public class ActivityDetailsFactory {
     }
 
     private static List<Coordinate> createCoordinateListFrom(final List<List<List<Double>>> coordsList) {
-        return toSingleList(coordsList).parallelStream().map(latLon -> Coordinate.from(latLon.get(0), latLon.get(1))).collect(Collectors.toList());
+        return toSingleList(coordsList).parallelStream().map(latLon -> Coordinate.from(latLon.get(0), latLon.get(1)))
+                .filter(Coordinate::isValid)
+                .collect(Collectors.toList());
     }
 
 }

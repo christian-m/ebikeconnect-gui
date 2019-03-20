@@ -27,12 +27,27 @@ package de.perdoctus.ebikeconnect.gui;
  */
 
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.lynden.gmapsfx.GoogleMapView;
+import com.lynden.gmapsfx.MapComponentInitializedListener;
+import com.lynden.gmapsfx.javascript.object.GoogleMap;
+import com.lynden.gmapsfx.javascript.object.LatLong;
+import com.lynden.gmapsfx.javascript.object.LatLongBounds;
+import com.lynden.gmapsfx.javascript.object.MVCArray;
+import com.lynden.gmapsfx.javascript.object.MapOptions;
+import com.lynden.gmapsfx.javascript.object.MapTypeIdEnum;
+import com.lynden.gmapsfx.javascript.object.Marker;
+import com.lynden.gmapsfx.javascript.object.MarkerOptions;
+import com.lynden.gmapsfx.shapes.Polyline;
+import com.lynden.gmapsfx.shapes.PolylineOptions;
 import de.perdoctus.ebikeconnect.gui.components.table.DurationCellFactory;
 import de.perdoctus.ebikeconnect.gui.components.table.LocalDateCellFactory;
 import de.perdoctus.ebikeconnect.gui.components.table.NumberCellFactory;
-import de.perdoctus.ebikeconnect.gui.models.*;
+import de.perdoctus.ebikeconnect.gui.models.ActivityDetails;
+import de.perdoctus.ebikeconnect.gui.models.ActivityDetailsGroup;
+import de.perdoctus.ebikeconnect.gui.models.ActivityHeader;
+import de.perdoctus.ebikeconnect.gui.models.ActivityHeaderGroup;
+import de.perdoctus.ebikeconnect.gui.models.Coordinate;
 import de.perdoctus.ebikeconnect.gui.models.json.LatLng;
 import de.perdoctus.ebikeconnect.gui.services.ActivityDaysHeaderService;
 import de.perdoctus.ebikeconnect.gui.services.ActivityDetailsGroupService;
@@ -50,10 +65,12 @@ import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
 import javafx.scene.chart.NumberAxis;
 import javafx.scene.chart.XYChart;
-import javafx.scene.control.*;
+import javafx.scene.control.Alert;
+import javafx.scene.control.ButtonType;
+import javafx.scene.control.SelectionMode;
+import javafx.scene.control.TableColumn;
+import javafx.scene.control.TableView;
 import javafx.scene.control.cell.CheckBoxListCell;
-import javafx.scene.web.WebEngine;
-import javafx.scene.web.WebView;
 import javafx.stage.FileChooser;
 import javafx.stage.Modality;
 import javafx.util.StringConverter;
@@ -70,13 +87,15 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.FormatStyle;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.ResourceBundle;
 import java.util.stream.Collectors;
 
 import static java.util.stream.Collectors.toList;
 
-public class ActivitiesOverviewController {
+public class ActivitiesOverviewController implements MapComponentInitializedListener {
 
     public static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.SHORT, FormatStyle.MEDIUM);
     public static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofLocalizedTime(FormatStyle.MEDIUM);
@@ -113,11 +132,11 @@ public class ActivitiesOverviewController {
     // Activity Segments
     @FXML
     public CheckListView<ActivityHeader> lstSegments;
-    // Webview
+    // Google MapView
     @FXML
-    private WebView webView;
+    private GoogleMapView mapView;
 
-    private WebEngine webEngine;
+    private GoogleMap map;
     // Chart
     @FXML
     private ToggleableSeriesChart<Number, Number> chart;
@@ -130,14 +149,18 @@ public class ActivitiesOverviewController {
     // Properties
     private ObjectProperty<ActivityDetailsGroup> currentActivityDetailsGroup = new SimpleObjectProperty<>();
 
+    final List<Polyline> currentPolylines = new ArrayList<>();
+    Marker currentMarker;
+    double conversionFactor;
+
     @FXML
     public void initialize() {
         logger.info("Init!");
 
         NUMBER_FORMAT.setMaximumFractionDigits(2);
 
-        webEngine = webView.getEngine();
-        webEngine.load(getClass().getResource("/html/googleMap.html").toExternalForm());
+        mapView.setKey("AIzaSyC0ezbf26xrpq8zt_PmojhpYjbb9xhe5uU");
+        mapView.addMapInializedListener(this);
 
         // Activity Headers
         activityDaysHeaderService.setOnSucceeded(event -> {
@@ -233,7 +256,7 @@ public class ActivitiesOverviewController {
         xAxis.setTickLabelFormatter(new StringConverter<Number>() {
             @Override
             public String toString(Number object) {
-                final Duration duration = Duration.of(object.intValue(), ChronoUnit.SECONDS);
+                final Duration duration = Duration.of(new Double(object.intValue() * conversionFactor).intValue(), ChronoUnit.SECONDS);
                 return String.valueOf(DurationFormatter.formatHhMmSs(duration));
             }
 
@@ -257,15 +280,18 @@ public class ActivitiesOverviewController {
             final Number valueForDisplay = xAxis.getValueForDisplay(event.getX());
             final List<Coordinate> trackpoints = getCurrentActivityDetailsGroup().getJoinedTrackpoints();
             final int index = valueForDisplay.intValue();
-            if (index >= 0 && index < trackpoints.size()) {
-                final Coordinate coordinate = trackpoints.get(index);
+            if (index >= 0 && index < getCurrentActivityDetailsGroup().getJoinedActivityCount()) {
+                int trackpointIndex = getTrackpoint(index, trackpoints.size(), getCurrentActivityDetailsGroup().getJoinedActivityCount());
+                final Coordinate coordinate = trackpoints.get(trackpointIndex);
                 if (coordinate.isValid()) {
-                    final LatLng latLng = new LatLng(coordinate);
-                    try {
-                        webEngine.executeScript("updateMarkerPosition(" + objectMapper.writeValueAsString(latLng) + ");");
-                    } catch (JsonProcessingException e) {
-                        e.printStackTrace(); //TODO clean up ugly code!!!!--------------
+                    final LatLong currentPosition = new LatLong(coordinate.getLat(), coordinate.getLng());
+                    final MarkerOptions currentMarkerOptions = new MarkerOptions().position(currentPosition)
+                            .visible(Boolean.TRUE);
+                    if (currentMarker != null) {
+                        map.removeMarker(currentMarker);
                     }
+                    currentMarker = new Marker(currentMarkerOptions);
+                    map.addMarker(currentMarker);
                 }
             }
         });
@@ -301,39 +327,73 @@ public class ActivitiesOverviewController {
     private void refreshMap(final ActivityDetailsGroup activityDetailsGroup) {
         final List<ActivityDetails> activityDaySegments = activityDetailsGroup.getActivitySegments();
 
-        final ObjectMapper objectMapper = new ObjectMapper();
+        map.clearMarkers();
+        currentPolylines.forEach(polyline -> map.removeMapShape(polyline));
 
-        webEngine.executeScript("clearPolylines();");
+        final PolylineOptions polylineOptions = new PolylineOptions()
+                .strokeWeight(2)
+                .strokeColor("blue");
 
+        final List<LatLng> allLatLngs = new ArrayList<>();
         for (ActivityDetails activityDaySegment : activityDaySegments) {
             final List<Coordinate> trackPoints = activityDaySegment.getTrackPoints();
             final List<LatLng> latLngs = trackPoints.stream().filter(Coordinate::isValid).map(LatLng::new).collect(toList());
+            allLatLngs.addAll(latLngs);
 
+            final LatLong firstMarkerPosition =
+                    new LatLong(latLngs.get(0).getLat(), latLngs.get(0).getLng());
+            final MarkerOptions firstMarkerOptions = new MarkerOptions().position(firstMarkerPosition)
+                    .visible(Boolean.TRUE);
+            map.addMarker(new Marker(firstMarkerOptions));
 
-            try {
-                webEngine.executeScript("var bounds = new google.maps.LatLngBounds();");
-                latLngs.forEach(e -> {
-                    try {
-                        webEngine.executeScript("bounds.extend(new google.maps.LatLng(" + objectMapper.writeValueAsString(e) + "))");
-                    } catch (JsonProcessingException e1) {
-                        logger.error("Failed to serialize LatLngs", e);
-                    }
-                });
+            final MVCArray polylinePositions = new MVCArray();
+            latLngs.forEach(e -> {
+                polylinePositions.push(new LatLong(e.getLat(), e.getLng()));
+            });
 
-                webEngine.executeScript("var track = " + objectMapper.writeValueAsString(latLngs) + ";");
-                webEngine.executeScript("addTrackSegment(track);");
-                webEngine.executeScript("googleMap.setCenter(bounds.getCenter())");
-                webEngine.executeScript("googleMap.setZoom(12)");
-            } catch (JsonProcessingException e) {
-                logger.error("Failed to serialize LatLngs", e);
-            }
+            final Polyline polyline = new Polyline(polylineOptions);
+            polyline.setPath(polylinePositions);
+            map.addMapShape(polyline);
+            currentPolylines.add(polyline);
+
+            final LatLong lastMarkerPosition =
+                    new LatLong(latLngs.get(latLngs.size() - 1).getLat(), latLngs.get(latLngs.size() - 1).getLng());
+            final MarkerOptions lastMarkerOptions = new MarkerOptions().position(lastMarkerPosition)
+                    .visible(Boolean.TRUE);
+            map.addMarker(new Marker(lastMarkerOptions));
         }
 
+        LatLongBounds bounds = getLatLongBounds(allLatLngs);
+        map.fitBounds(bounds);
+    }
 
+    private LatLongBounds getLatLongBounds(List<LatLng> allLatLngs) {
+        Optional<LatLng> minLatOpt = allLatLngs.stream()
+                .min(LatLng::compareLatTo);
+        LatLng minLat = minLatOpt.orElse(new LatLng(0.0, 0.0));
+        Optional<LatLng> maxLatOpt = allLatLngs.stream()
+                .max(LatLng::compareLatTo);
+        LatLng maxLat = maxLatOpt.orElse(new LatLng(0.0, 0.0));
+        Optional<LatLng> minLonOpt = allLatLngs.stream()
+                .min(LatLng::compareLngTo);
+        LatLng minLon = minLonOpt.orElse(new LatLng(0.0, 0.0));
+        Optional<LatLng> maxLonOpt = allLatLngs.stream()
+                .max(LatLng::compareLngTo);
+        LatLng maxLon = maxLonOpt.orElse(new LatLng(0.0, 0.0));
+        LatLong ne = new LatLong(maxLat.getLat(), maxLon.getLng());
+        LatLong sw = new LatLong(minLat.getLat(), minLon.getLng());
+        return new LatLongBounds(sw, ne);
     }
 
     private void refreshChart(final ActivityDetailsGroup activityDetailsGroup) {
         final List<ActivityDetails> activityDaySegments = activityDetailsGroup.getActivitySegments();
+        int seconds = 0;
+        int items = 0;
+        for (ActivityDetails activityDetails : activityDaySegments) {
+            seconds += activityDetails.getActivityHeader().getDrivingTime().getSeconds();
+            items += activityDetails.getCadences().size();
+        }
+        conversionFactor = (seconds + 0.0d) / (items + 0.0d);
 
         chart.getData().clear();
         addChartSeries(rb.getString("altitude"), activityDaySegments.stream().filter(ad -> ad.getAltitudes() != null).flatMap(ad -> ad.getAltitudes().stream()).collect(toList()));
@@ -420,4 +480,33 @@ public class ActivitiesOverviewController {
             exportService.restart();
         }
     }
+
+    @Override
+    public void mapInitialized() {
+        MapOptions mapOptions = new MapOptions();
+
+        mapOptions.center(new LatLong(49.086254, 8.553035))
+                .mapType(MapTypeIdEnum.ROADMAP)
+                .overviewMapControl(false)
+                .panControl(false)
+                .rotateControl(false)
+                .scaleControl(false)
+                .streetViewControl(false)
+                .zoomControl(false)
+                .zoom(8);
+
+        map = mapView.createMap(mapOptions);
+        map.clearMarkers();
+    }
+
+    private int getTrackpoint(int activityPointNr, int trackPointCount, int activityCount) {
+        final float valuesPerTrackpoint = activityCount / (float) trackPointCount;
+        return getMatchingIndex(activityPointNr, valuesPerTrackpoint);
+    }
+
+    private int getMatchingIndex(int trackPointNr, float valuesPerTrackpoint) {
+        float nearestHeightInfo = trackPointNr / valuesPerTrackpoint;
+        return (int) Math.floor(nearestHeightInfo);
+    }
+
 }

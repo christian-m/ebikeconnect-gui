@@ -12,6 +12,7 @@ Lists of 37 third-party dependencies.
      (The Apache Software License, Version 2.0) Jackson-JAXRS-JSON (com.fasterxml.jackson.jaxrs:jackson-jaxrs-json-provider:2.6.3 - http://wiki.fasterxml.com/JacksonHome/jackson-jaxrs-json-provider)
      (The Apache Software License, Version 2.0) Jackson-module-JAXB-annotations (com.fasterxml.jackson.module:jackson-module-jaxb-annotations:2.6.3 - http://wiki.fasterxml.com/JacksonJAXBAnnotations)
      (The Apache Software License, Version 2.0) Guava: Google Core Libraries for Java (com.google.guava:guava:19.0 - https://github.com/google/guava/guava)
+     (The Apache Software License, Version 2.0) GMapsFX: A Java API for using Google Maps within a JavaFX application (com.lynden:GMapsFX:2.12.0 - http://rterp.github.io/GMapsFX/)
      (CDDL 1.1) (GPL2 w/ CPE) istack common utility code runtime (com.sun.istack:istack-commons-runtime:2.21 - http://java.net/istack-commons/istack-commons-runtime/)
      (Apache License, Version 2.0) fastinfoset (com.sun.xml.fastinfoset:FastInfoset:1.2.13 - http://fi.java.net)
      (The Apache Software License, Version 2.0) Commons Codec (commons-codec:commons-codec:1.6 - http://commons.apache.org/codec/)
